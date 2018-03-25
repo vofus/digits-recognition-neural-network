@@ -1,11 +1,21 @@
+import fs from "fs";
+import path from "path";
+import { promisify } from "util";
 import nj, { NdArray, reshape } from "numjs";
 import ndarray from "ndarray";
-import { getRandomInt } from "./utils";
+import { getRandomInt, getFileName } from "./utils";
 import { ActivationStrategy, Sigmoid } from "./activators";
+
+const writeFile = promisify(fs.writeFile);
+const readFile = promisify(fs.readFile);
 
 interface INetwork {
 	train(trainSet: TrainSet, count: number, activator?: ActivationStrategy): void;
 	query(inputs: number[]): any;
+}
+
+interface IModel<T> {
+	getModel(): T;
 }
 
 interface IForwardResult {
@@ -19,8 +29,60 @@ export interface ITrainItem {
 }
 
 export type TrainSet = ITrainItem[];
+export type ModelNN = { IH: NdArray, HO: NdArray, LR: number, activator: ActivationStrategy };
 
-export class Network implements INetwork {
+export class Network implements INetwork, IModel<ModelNN> {
+	// сериализуем тренированную модель
+	static async serialize(nn: Network, fileName: string = Date.now().toString(), filePath: string = "../models") {
+		const { IH, HO, LR, activator } = nn.getModel();
+		const resolvedPath = path.resolve(__dirname, filePath);
+
+		try {
+			const data = {
+				IH: IH.tolist(),
+				HO: HO.tolist(),
+				LR
+			};
+
+			const jsonData = JSON.stringify(data);
+
+			if (!fs.existsSync(resolvedPath)) {
+				fs.mkdirSync(resolvedPath);
+			}
+
+			await writeFile(`${resolvedPath}/${getFileName(fileName)}`, jsonData);
+		} catch (err) {
+			throw err;
+		}
+	}
+
+	// десериализуем тренированную модель
+	static async deserialize(fileName: string, filePath: string = "../models"): Promise<Network> {
+		try {
+			const jsonStr: string = await readFile(
+				path.resolve(__dirname, `${filePath}/${getFileName(fileName)}`),
+				"utf8"
+			);
+			const { IH, HO, LR } = JSON.parse(jsonStr);
+			const weightsIH = nj.array(IH);
+			const weightsHO = nj.array(HO);
+
+			const [hiddenSize, inputSize] = weightsIH.shape;
+			const [outputSize] = weightsHO.shape;
+			const nn: Network = new Network(inputSize, hiddenSize, outputSize);
+
+			nn.setModel({
+				IH: weightsIH,
+				HO: weightsHO,
+				LR,
+				activator: new Sigmoid()
+			});
+
+			return nn;
+		} catch (err) {
+			throw err;
+		}
+	}
 	// Матрица весов между входным и скрытым слоем
 	private weightsIH: NdArray;
 	// Матрица весов между скрытым и выходным слоем
@@ -28,12 +90,31 @@ export class Network implements INetwork {
 	// Объект-активатор (По умолчанию сигмоида)
 	private activator: ActivationStrategy = new Sigmoid();
 
-	constructor(
-		private inputSize: number,
-		private hiddenSize: number,
-		private outputSize: number,
-		private LR: number = 0.3
-	) {
+	/**
+	 * Getter модели сети
+	 */
+	getModel(): ModelNN {
+		return {
+			IH: this.weightsIH,
+			HO: this.weightsHO,
+			LR: this.LR,
+			activator: this.activator
+		};
+	}
+
+	/**
+	 * Setter модели сети
+	 */
+	setModel(model: ModelNN): void {
+		const { IH, HO, LR, activator } = model;
+
+		this.weightsIH = IH;
+		this.weightsHO = HO;
+		this.LR = LR;
+		this.activator = activator;
+	}
+
+	constructor(inputSize: number, hiddenSize: number, outputSize: number, private LR: number = 0.3) {
 		this.weightsIH = this.generateWeights(hiddenSize, inputSize);
 		this.weightsHO = this.generateWeights(outputSize, hiddenSize);
 	}
