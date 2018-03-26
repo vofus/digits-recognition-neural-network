@@ -1,6 +1,4 @@
 import { Network, TrainSet } from "./network";
-import ndarray from "ndarray";
-import nj from "numjs";
 
 const trainSet: TrainSet = [
 	{ inputs: [1, 0], targets: [1, 0] },
@@ -16,18 +14,18 @@ const trainSet_02: TrainSet = [
 	{ inputs: [1, 1], targets: [0] }
 ];
 
-const nn = new Network(2, 4, 1, 0.285);
-
-console.time("Train");
-// testNN.train(trainSet, 10);
-nn.train(trainSet_02, 25000);
-console.timeEnd("Train");
+// const nn = new Network(2, 4, 2, 0.285);
+//
+// console.time("Train");
+// // testNN.train(trainSet, 10);
+// nn.train(trainSet, 25000);
+// console.timeEnd("Train");
 
 (async () => {
-	Network.serialize(nn, "test-model.json");
-	// const nn: Network = await Network.deserialize("test-model");
+	// await Network.serialize(nn, "test-model-02.json");
+	const nn: Network = await Network.deserialize("test-model-02.json");
 
-	for (const item of trainSet_02) {
+	for (const item of trainSet) {
 		const result = nn.query(item.inputs);
 		console.log();
 		console.log(result);
