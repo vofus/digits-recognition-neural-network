@@ -18,6 +18,7 @@
     "typescript": "^2.7.2"
   },
   "dependencies": {
+    "@types/node": "^9.6.0",
     "numjs": "^0.15.1"
   }
 }
