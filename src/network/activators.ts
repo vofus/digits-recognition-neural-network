@@ -1,4 +1,4 @@
-import { NjParam, NdArray, sigmoid } from "numjs";
+import { NdArray, NjParam, sigmoid } from "numjs";
 
 export interface ActivationStrategy {
 	execute<T = number>(x: NjParam<T>): NdArray<T>;
