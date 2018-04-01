@@ -1,9 +1,9 @@
 import fs from "fs";
-import path from "path";
 import { promisify } from "util";
 import nj, { NdArray } from "numjs";
 import { getFileName, getRandomInt } from "./utils";
 import { ActivationStrategy, Sigmoid } from "./activators";
+import { shuffle as _shuffle } from "lodash";
 
 const writeFile = promisify(fs.writeFile);
 const readFile = promisify(fs.readFile);
@@ -34,9 +34,8 @@ export type TrainSet = ITrainItem[];
 
 export class Network implements INetwork, IModel<ModelNN> {
 	// сериализуем тренированную модель
-	static async serialize(nn: Network, fileName: string = Date.now().toString(), filePath: string = "../models") {
+	static async serialize(nn: Network, filePath: string, fileName: string) {
 		const {IH, HO, LR} = nn.getModel();
-		const resolvedPath = path.resolve(__dirname, filePath);
 
 		try {
 			const data = {
@@ -47,23 +46,20 @@ export class Network implements INetwork, IModel<ModelNN> {
 
 			const jsonData = JSON.stringify(data);
 
-			if (!fs.existsSync(resolvedPath)) {
-				fs.mkdirSync(resolvedPath);
+			if (!fs.existsSync(filePath)) {
+				fs.mkdirSync(filePath);
 			}
 
-			await writeFile(`${resolvedPath}/${getFileName(fileName)}`, jsonData);
+			await writeFile(`${filePath}/${getFileName(fileName)}`, jsonData);
 		} catch (err) {
 			throw err;
 		}
 	}
 
 	// десериализуем тренированную модель
-	static async deserialize(fileName: string, filePath: string = "../models"): Promise<Network> {
+	static async deserialize(filePath: string, fileName: string): Promise<Network> {
 		try {
-			const jsonStr: string = await readFile(
-				path.resolve(__dirname, `${filePath}/${getFileName(fileName)}`),
-				"utf8"
-			);
+			const jsonStr: string = await readFile(`${filePath}/${getFileName(fileName)}`, "utf8");
 			const {IH, HO, LR} = JSON.parse(jsonStr);
 			const weightsIH = nj.array(IH);
 			const weightsHO = nj.array(HO);
@@ -124,20 +120,28 @@ export class Network implements INetwork, IModel<ModelNN> {
 	/**
 	 * Тренируем сеть
 	 * @param trainSet {TrainSet} тренировочная выборка
-	 * @param count {number} количество итераций
+	 * @param epochs {number} количество эпох обучения
 	 * @param activator {ActivationStrategy} объект-активатор
 	 */
-	train(trainSet: TrainSet, count: number, activator?: ActivationStrategy): void {
+	train(trainSet: TrainSet, epochs: number, activator?: ActivationStrategy): void {
 		if (Boolean(activator)) {
 			this.activator = activator;
 		}
 
-		let counter = count;
-		while (counter > 0) {
-			const randIndex = getRandomInt(0, trainSet.length);
-			const {inputs, targets} = trainSet[randIndex];
-			this.trainStep(inputs, targets);
-			counter -= 1;
+		let epochCounter = epochs;
+		while (epochCounter > 0) {
+			const shuffled: TrainSet = _shuffle(trainSet);
+			let trainCounter = trainSet.length - 1;
+
+			console.time(`Epoch ${epochCounter}`);
+			while (trainCounter >= 0) {
+				const {inputs, targets} = shuffled[trainCounter];
+				this.trainStep(inputs, targets);
+				trainCounter -= 1;
+			}
+
+			console.timeEnd(`Epoch ${epochCounter}`);
+			epochCounter -= 1;
 		}
 	}
 

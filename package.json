@@ -12,6 +12,7 @@
   "author": "Vofus",
   "license": "ISC",
   "devDependencies": {
+    "@types/lodash": "^4.14.106",
     "@types/numjs": "^0.14.3",
     "nodemon": "^1.15.1",
     "tslint": "^5.9.1",
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "@types/node": "^9.6.0",
+    "lodash": "^4.17.5",
     "mnist": "^1.1.0",
     "numjs": "^0.15.1"
   }
