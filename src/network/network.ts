@@ -8,15 +8,15 @@ import { shuffle as _shuffle } from "lodash";
 const writeFile = promisify(fs.writeFile);
 const readFile = promisify(fs.readFile);
 
-type ModelNN = { IH: NdArray, HO: NdArray, LR: number, activator: ActivationStrategy };
+export type ModelNN = { IH: NdArray, HO: NdArray, LR: number, activator: ActivationStrategy };
 
-interface INetwork {
+export interface INetwork {
 	train(trainSet: TrainSet, count: number, activator?: ActivationStrategy): void;
 
 	query(inputs: number[]): any;
 }
 
-interface IModel<T> {
+export interface IModel<T> {
 	getModel(): T;
 }
 
