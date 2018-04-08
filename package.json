@@ -1,14 +1,14 @@
 {
-  "name": "ts-network",
+  "name": "digits-recognition-neural-network",
   "version": "0.0.1",
-  "description": "TypeScript Neural Network",
+  "description": "TypeScript Neural Network for digit recognition",
   "author": "Vofus <vofuss@gmail.com>",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vofus/basic-ts-neural-network"
+    "url": "https://github.com/vofus/digits-recognition-neural-network"
   },
   "scripts": {
     "prepublish": "npm run build",

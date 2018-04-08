@@ -1,1 +1,1 @@
-Basic neural network via TypeScript
+TypeScript Neural Network for digit recognition
