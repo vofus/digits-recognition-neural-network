@@ -1,17 +1,22 @@
 {
-  "name": "ts_network",
+  "name": "ts-network",
   "version": "0.0.1",
   "description": "TypeScript Neural Network",
-	"main": "dist/index.js",
-	"types": "dist/index.d.ts",
+  "author": "Vofus <vofuss@gmail.com>",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vofus/basic-ts-neural-network"
+  },
   "scripts": {
+    "prepublish": "npm run build",
     "watch": "tsc -w",
     "build": "tsc",
     "watch-node": "nodemon dist/index.js",
     "dev": "npm run watch & npm run watch-node"
   },
-  "author": "Vofus",
-  "license": "ISC",
   "devDependencies": {
     "nodemon": "^1.15.1",
     "tslint": "^5.9.1",
