@@ -2,7 +2,8 @@
   "name": "ts_network",
   "version": "0.0.1",
   "description": "TypeScript Neural Network",
-  "main": "index.ts",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
   "scripts": {
     "watch": "tsc -w",
     "build": "tsc",
@@ -12,13 +13,16 @@
   "author": "Vofus",
   "license": "ISC",
   "devDependencies": {
-    "@types/numjs": "^0.14.3",
     "nodemon": "^1.15.1",
     "tslint": "^5.9.1",
     "typescript": "^2.7.2"
   },
   "dependencies": {
+    "@types/lodash": "^4.14.106",
     "@types/node": "^9.6.0",
+    "@types/numjs": "^0.14.3",
+    "lodash": "^4.17.5",
+    "mnist": "git+https://github.com/ApelSYN/mnist.git",
     "numjs": "^0.15.1"
   }
 }

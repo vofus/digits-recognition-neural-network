@@ -1,20 +1,22 @@
 import fs from "fs";
-import path from "path";
 import { promisify } from "util";
-import nj, { NdArray, reshape } from "numjs";
-import ndarray from "ndarray";
-import { getRandomInt, getFileName } from "./utils";
+import nj, { NdArray } from "numjs";
+import { getFileName, getRandomInt } from "./utils";
 import { ActivationStrategy, Sigmoid } from "./activators";
+import { shuffle as _shuffle } from "lodash";
 
 const writeFile = promisify(fs.writeFile);
 const readFile = promisify(fs.readFile);
 
-interface INetwork {
+export type ModelNN = { IH: NdArray, HO: NdArray, LR: number, activator: ActivationStrategy };
+
+export interface INetwork {
 	train(trainSet: TrainSet, count: number, activator?: ActivationStrategy): void;
+
 	query(inputs: number[]): any;
 }
 
-interface IModel<T> {
+export interface IModel<T> {
 	getModel(): T;
 }
 
@@ -29,13 +31,11 @@ export interface ITrainItem {
 }
 
 export type TrainSet = ITrainItem[];
-export type ModelNN = { IH: NdArray, HO: NdArray, LR: number, activator: ActivationStrategy };
 
 export class Network implements INetwork, IModel<ModelNN> {
 	// сериализуем тренированную модель
-	static async serialize(nn: Network, fileName: string = Date.now().toString(), filePath: string = "../models") {
-		const { IH, HO, LR, activator } = nn.getModel();
-		const resolvedPath = path.resolve(__dirname, filePath);
+	static async serialize(nn: Network, filePath: string, fileName: string) {
+		const {IH, HO, LR} = nn.getModel();
 
 		try {
 			const data = {
@@ -46,24 +46,21 @@ export class Network implements INetwork, IModel<ModelNN> {
 
 			const jsonData = JSON.stringify(data);
 
-			if (!fs.existsSync(resolvedPath)) {
-				fs.mkdirSync(resolvedPath);
+			if (!fs.existsSync(filePath)) {
+				fs.mkdirSync(filePath);
 			}
 
-			await writeFile(`${resolvedPath}/${getFileName(fileName)}`, jsonData);
+			await writeFile(`${filePath}/${getFileName(fileName)}`, jsonData);
 		} catch (err) {
 			throw err;
 		}
 	}
 
 	// десериализуем тренированную модель
-	static async deserialize(fileName: string, filePath: string = "../models"): Promise<Network> {
+	static async deserialize(filePath: string, fileName: string): Promise<Network> {
 		try {
-			const jsonStr: string = await readFile(
-				path.resolve(__dirname, `${filePath}/${getFileName(fileName)}`),
-				"utf8"
-			);
-			const { IH, HO, LR } = JSON.parse(jsonStr);
+			const jsonStr: string = await readFile(`${filePath}/${getFileName(fileName)}`, "utf8");
+			const {IH, HO, LR} = JSON.parse(jsonStr);
 			const weightsIH = nj.array(IH);
 			const weightsHO = nj.array(HO);
 
@@ -83,6 +80,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 			throw err;
 		}
 	}
+
 	// Матрица весов между входным и скрытым слоем
 	private weightsIH: NdArray;
 	// Матрица весов между скрытым и выходным слоем
@@ -106,7 +104,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 * Setter модели сети
 	 */
 	setModel(model: ModelNN): void {
-		const { IH, HO, LR, activator } = model;
+		const {IH, HO, LR, activator} = model;
 
 		this.weightsIH = IH;
 		this.weightsHO = HO;
@@ -122,20 +120,28 @@ export class Network implements INetwork, IModel<ModelNN> {
 	/**
 	 * Тренируем сеть
 	 * @param trainSet {TrainSet} тренировочная выборка
-	 * @param count {number} количество итераций
+	 * @param epochs {number} количество эпох обучения
 	 * @param activator {ActivationStrategy} объект-активатор
 	 */
-	train(trainSet: TrainSet, count: number, activator?: ActivationStrategy): void {
+	train(trainSet: TrainSet, epochs: number, activator?: ActivationStrategy): void {
 		if (Boolean(activator)) {
 			this.activator = activator;
 		}
 
-		let counter = count;
-		while (counter > 0) {
-			const randIndex = getRandomInt(0, trainSet.length);
-			const { inputs, targets } = trainSet[randIndex];
-			this.trainStep(inputs, targets);
-			counter -= 1;
+		let epochCounter = epochs;
+		while (epochCounter > 0) {
+			const shuffled: TrainSet = _shuffle(trainSet);
+			let trainCounter = trainSet.length - 1;
+
+			console.time(`Epoch ${epochCounter}`);
+			while (trainCounter >= 0) {
+				const {inputs, targets} = shuffled[trainCounter];
+				this.trainStep(inputs, targets);
+				trainCounter -= 1;
+			}
+
+			console.timeEnd(`Epoch ${epochCounter}`);
+			epochCounter -= 1;
 		}
 	}
 
@@ -143,11 +149,15 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 * Выполняем запрос к сети
 	 * @param inputs {number[]} входные сигналы
 	 */
-	query(inputs: number[]): any {
+	query(inputs: number[]): number[] {
 		const inputMatrix = nj.array(inputs).reshape(1, inputs.length).T as NdArray;
-		const { finalOutputs } = this.forwardPropagation(inputMatrix);
+		const {finalOutputs} = this.forwardPropagation(inputMatrix);
 
-		return finalOutputs;
+		return finalOutputs.tolist<number[]>().reduce((res, item) => {
+			res.push(...item);
+
+			return res;
+		}, []);
 	}
 
 
@@ -216,7 +226,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 * @param result {IForwardResult} Объект с выходными сигналами на слоях после прямого прохода
 	 */
 	private backPropagation(inputMatrix: NdArray, targetMatrix: NdArray, result: IForwardResult): void {
-		const { hiddenOutputs, finalOutputs } = result;
+		const {hiddenOutputs, finalOutputs} = result;
 		const outputErrors = targetMatrix.subtract(finalOutputs);
 		const hiddenErrors = this.weightsHO.T.dot(outputErrors);
 		const additionalHO = this.calcAdditionalWeights(hiddenOutputs, finalOutputs, outputErrors);

@@ -1,10 +1,10 @@
-import { NjParam, NdArray, sigmoid } from "numjs";
+import { NdArray, NjParam, sigmoid } from "numjs";
 
 export interface ActivationStrategy {
 	execute<T = number>(x: NjParam<T>): NdArray<T>;
 }
 
-abstract class BasicActivation implements ActivationStrategy {
+export abstract class BasicActivation implements ActivationStrategy {
 	protected abstract activate<T = number>(x: NjParam<T>): NdArray<T>;
 
 	execute<T = number>(x: NjParam<T>): NdArray<T> {

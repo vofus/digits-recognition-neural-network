@@ -1,36 +1,57 @@
-import { Network, TrainSet } from "./network";
-import ndarray from "ndarray";
-import nj from "numjs";
+export * from "./network/index";
+export * from "./digit-recognition/digit-recognition";
+// import { Network, TrainSet } from "./network";
+// import { DigitRecognition } from "./digit-recognition/digit-recognition";
+// import path from "path";
+// const mnist = require("mnist");
 
-const trainSet: TrainSet = [
-	{ inputs: [1, 0], targets: [1, 0] },
-	{ inputs: [0, 1], targets: [0, 1] },
-	{ inputs: [0, 0], targets: [0, 0] },
-	{ inputs: [1, 1], targets: [0, 0] }
-];
+// const {test} = mnist.set(0, 10);
+// const MODELS_PATH: string = path.resolve(__dirname, "../models");
 
-const trainSet_02: TrainSet = [
-	{ inputs: [1, 0], targets: [1] },
-	{ inputs: [0, 1], targets: [1] },
-	{ inputs: [0, 0], targets: [0] },
-	{ inputs: [1, 1], targets: [0] }
-];
+// interface MnistItem {
+// 	input: number[];
+// 	output: number[];
+// }
 
-const nn = new Network(2, 4, 1, 0.285);
+// const MnistTestSet: TrainSet = test.map((item: MnistItem) => {
+// 	return {
+// 		inputs: item.input,
+// 		targets: item.output
+// 	};
+// });
 
-console.time("Train");
-// testNN.train(trainSet, 10);
-nn.train(trainSet_02, 25000);
-console.timeEnd("Train");
 
-(async () => {
-	Network.serialize(nn, "test-model.json");
-	// const nn: Network = await Network.deserialize("test-model");
+// // const nn = new Network(784, 200, 10, 0.085);
 
-	for (const item of trainSet_02) {
-		const result = nn.query(item.inputs);
-		console.log();
-		console.log(result);
-		// console.log(`----------- ${result.get(0, 0) >= 0.85 || result.get(0, 1) >= 0.85 ? "TRUE" : "FALSE"} ------------`);
-	}
-})();
+// // console.time("Train");
+// // nn.train(MnistTrainSet, 50);
+// // console.timeEnd("Train");
+
+// (async () => {
+// 	try {
+// 		const fileName = "mnist-model.json";
+// 		const digitNN = new DigitRecognition(15, 0.117);
+
+// 		await digitNN.train(100);
+// 		await Network.serialize(digitNN.network, MODELS_PATH, fileName);
+// 		// const nn: Network = await Network.deserialize(MODELS_PATH, fileName);
+// 		// const digitNN = new DigitRecognition(nn);
+
+// 		const result = await digitNN.autoTest();
+// 		console.log("=========================");
+// 		console.log(result);
+// 		console.log("=========================");
+
+
+// 		// for (const item of MnistTestSet) {
+// 		// 	const result = nn.query(item.inputs);
+// 		// 	console.log(result);
+// 		// 	console.log("- - - - - - - -");
+// 		// 	console.log(item.targets);
+// 		// 	console.log("============================");
+// 		// 	// console.log(`----------- ${result.get(0, 0) >= 0.85 || result.get(0, 1) >= 0.85 ? "TRUE" : "FALSE"} ------------`);
+// 		// }
+// 	} catch (err) {
+// 		console.error(err);
+// 	}
+// })();
