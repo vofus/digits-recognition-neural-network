@@ -34,7 +34,7 @@ export type TrainSet = ITrainItem[];
 
 export class Network implements INetwork, IModel<ModelNN> {
 	// сериализуем тренированную модель
-	static async serialize(nn: Network, filePath: string, fileName: string) {
+	static async serialize(nn: Network, filePath: string) {
 		const {IH, HO, LR} = nn.getModel();
 
 		try {
@@ -50,16 +50,16 @@ export class Network implements INetwork, IModel<ModelNN> {
 				fs.mkdirSync(filePath);
 			}
 
-			await writeFile(`${filePath}/${getFileName(fileName)}`, jsonData);
+			await writeFile(getFileName(filePath), jsonData);
 		} catch (err) {
 			throw err;
 		}
 	}
 
 	// десериализуем тренированную модель
-	static async deserialize(filePath: string, fileName: string): Promise<Network> {
+	static async deserialize(filePath: string): Promise<Network> {
 		try {
-			const jsonStr: string = await readFile(`${filePath}/${getFileName(fileName)}`, "utf8");
+			const jsonStr: string = await readFile(getFileName(filePath), "utf8");
 			const {IH, HO, LR} = JSON.parse(jsonStr);
 			const weightsIH = nj.array(IH);
 			const weightsHO = nj.array(HO);
