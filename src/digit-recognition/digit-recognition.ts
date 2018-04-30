@@ -149,7 +149,7 @@ export class DigitRecognition {
 		for (let i = 0; i < 10; ++i) {
 			const testSet = DigitRecognition.prepareMnistItems(mnist[i].set(0, eachDigitCount));
 
-			const items: RecognizedItem[] = _map((item: ITrainItem): RecognizedItem => {
+			const items: RecognizedItem[] = _map<ITrainItem, RecognizedItem>((item) => {
 				const result = this.nn.query(item.inputs);
 				const maxIndex = DigitRecognition.getMaxIndex(result);
 
@@ -164,7 +164,7 @@ export class DigitRecognition {
 
 			results.push({
 				digit: i,
-				totalPercent: _round(recognized.length / eachDigitCount, 2),
+				totalPercent: recognized.length / eachDigitCount,
 				results: items
 			});
 		}
