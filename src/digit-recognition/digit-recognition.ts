@@ -18,6 +18,15 @@ interface MnistItem {
 }
 
 /**
+ * Элемент с информацией о распознавании цифры из набора для одной цифры
+ */
+export interface RecognizedItem {
+	isRecognized: boolean;
+	recognition: number;
+	recognitionPercent: number;
+}
+
+/**
  * Информация по тестированию одной цифры
  */
 export interface AutoTestDigit {
@@ -31,21 +40,14 @@ export interface AutoTestDigit {
  * Результат, возвращаемый методом автоматического тестирования
  */
 export interface AutoTestResult {
-	testsCount: number;
-	digits: any[];
+	digit: number;
+	totalPercent: number;
+	results: RecognizedItem[];
 }
 
 export interface ManualTestResult {
 	digit: number;
 	percent: number;
-}
-
-/**
- * Элемент с информацией о распознавании цифры из набора для одной цифры
- */
-interface RecognizedItem {
-	isRecognized: boolean;
-	recognition: number;
 }
 
 /**
@@ -61,8 +63,8 @@ export class DigitRecognition {
 	/**
 	 * Создаем тренировочную выборку
 	 */
-	private static createTrainSet(): TrainSet {
-		const {training} = mnist.set(DigitRecognition.TRAIN_SET_SIZE, 0);
+	private static createTrainSet(trainSetSize: number = DigitRecognition.TRAIN_SET_SIZE): TrainSet {
+		const {training} = mnist.set(trainSetSize, 0);
 
 		return DigitRecognition.prepareMnistItems(training);
 	}
@@ -127,9 +129,9 @@ export class DigitRecognition {
 	 * Создаем и тренируем сеть
 	 * @param epochs количество эпох обучения
 	 */
-	async train(epochs: number): Promise<void> {
+	async train(trainSetSize: number, epochs: number): Promise<void> {
 		try {
-			const trainSet: TrainSet = DigitRecognition.createTrainSet();
+			const trainSet: TrainSet = DigitRecognition.createTrainSet(trainSetSize);
 			this.nn.train(trainSet, epochs);
 		} catch (err) {
 			throw err;
@@ -141,37 +143,33 @@ export class DigitRecognition {
 	 * и возвращаем отчет по результатам тестирования
 	 * @param eachDigitCount количество тестов для каждой цифры
 	 */
-	async autoTest(eachDigitCount: number = 50): Promise<AutoTestResult> {
-		const results: AutoTestDigit[] = [];
+	async autoTest(eachDigitCount: number = 50): Promise<AutoTestResult[]> {
+		const results: AutoTestResult[] = [];
 
 		for (let i = 0; i < 10; ++i) {
-			const testSet = DigitRecognition.prepareMnistItems(mnist[i].set(100, 100 + eachDigitCount));
+			const testSet = DigitRecognition.prepareMnistItems(mnist[i].set(0, eachDigitCount));
 
-			const recognized: RecognizedItem[] = _flow([
-				_map((item: ITrainItem): RecognizedItem => {
-					const result = this.nn.query(item.inputs);
-					const maxIndex = DigitRecognition.getMaxIndex(result);
+			const items: RecognizedItem[] = _map((item: ITrainItem): RecognizedItem => {
+				const result = this.nn.query(item.inputs);
+				const maxIndex = DigitRecognition.getMaxIndex(result);
 
-					return {
-						isRecognized: maxIndex === i,
-						recognition: maxIndex === i ? _round(result[i], 2) : null
-					};
-				}),
-				_filter((item: RecognizedItem) => item.isRecognized)
-			])(testSet);
+				return {
+					isRecognized: maxIndex === i,
+					recognition: maxIndex,
+					recognitionPercent: _round(result[i], 2)
+				};
+			})(testSet);
+
+			const recognized: RecognizedItem[] = _filter<RecognizedItem>((item) => item.isRecognized)(items);
 
 			results.push({
 				digit: i,
-				totalRecognition: _round(recognized.length / eachDigitCount, 2),
-				minRecognition: _flow([_minBy("recognition"), _getOr(0, "recognition")])(recognized),
-				maxRecognition: _flow([_maxBy("recognition"), _getOr(0, "recognition")])(recognized),
+				totalPercent: _round(recognized.length / eachDigitCount, 2),
+				results: items
 			});
 		}
 
-		return {
-			testsCount: eachDigitCount,
-			digits: results
-		};
+		return results;
 	}
 
 	/**
@@ -185,7 +183,7 @@ export class DigitRecognition {
 
 		return {
 			digit: maxIndex,
-			percent: result[maxIndex]
+			percent: _round(result[maxIndex], 2)
 		};
 	}
 }
