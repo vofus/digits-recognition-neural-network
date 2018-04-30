@@ -35,6 +35,11 @@ export interface AutoTestResult {
 	digits: any[];
 }
 
+export interface ManualTestResult {
+	digit: number;
+	percent: number;
+}
+
 /**
  * Элемент с информацией о распознавании цифры из набора для одной цифры
  */
@@ -172,9 +177,15 @@ export class DigitRecognition {
 	/**
 	 * Тестируем обученную сеть в ручном режиме
 	 * и возвращаем результат, ожидаемый результат и процент распознавания
-	 * @param digitImg изображение цифры
+	 * @param inputs изображение цифры
 	 */
-	async manualTest(digitImg: any): Promise<any> {
-		throw new Error("Требуется реализация метода manualTest!");
+	async manualTest(inputs: number[]): Promise<ManualTestResult> {
+		const result = this.nn.query(inputs);
+		const maxIndex = DigitRecognition.getMaxIndex(result);
+
+		return {
+			digit: maxIndex,
+			percent: result[maxIndex]
+		};
 	}
 }
