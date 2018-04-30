@@ -46,10 +46,6 @@ export class Network implements INetwork, IModel<ModelNN> {
 
 			const jsonData = JSON.stringify(data);
 
-			if (!fs.existsSync(filePath)) {
-				fs.mkdirSync(filePath);
-			}
-
 			await writeFile(getFileName(filePath), jsonData);
 		} catch (err) {
 			throw err;
