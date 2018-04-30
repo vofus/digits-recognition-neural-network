@@ -156,7 +156,7 @@ export class DigitRecognition {
 				return {
 					isRecognized: maxIndex === i,
 					recognition: maxIndex,
-					recognitionPercent: _round(result[i], 2)
+					recognitionPercent: _round(result[maxIndex], 2)
 				};
 			})(testSet);
 
