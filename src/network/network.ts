@@ -126,12 +126,12 @@ export class Network implements INetwork, IModel<ModelNN> {
 
 		let epochCounter = epochs;
 		while (epochCounter > 0) {
-			const shuffled: TrainSet = _shuffle(trainSet);
+			// const shuffled: TrainSet = _shuffle(trainSet);
 			let trainCounter = trainSet.length - 1;
 
 			console.time(`Epoch ${epochCounter}`);
 			while (trainCounter >= 0) {
-				const {inputs, targets} = shuffled[trainCounter];
+				const {inputs, targets} = trainSet[trainCounter];
 				this.trainStep(inputs, targets);
 				trainCounter -= 1;
 			}
