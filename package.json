@@ -27,7 +27,7 @@
     "@types/node": "^9.6.0",
     "@types/numjs": "^0.14.3",
     "lodash": "^4.17.5",
-    "mnist": "git+https://github.com/ApelSYN/mnist.git",
+    "mnist": "^1.1.0",
     "numjs": "^0.15.1"
   }
 }
