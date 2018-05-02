@@ -1,6 +1,6 @@
 {
   "name": "digits-recognition-neural-network",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "TypeScript Neural Network for digit recognition",
   "author": "Vofus <vofuss@gmail.com>",
   "license": "MIT",
