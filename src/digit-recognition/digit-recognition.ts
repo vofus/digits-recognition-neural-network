@@ -83,24 +83,23 @@ export class DigitRecognition {
 	 * Находим индекс максимального числа в массиве
 	 */
 	private static getMaxIndex(arr: number[]): number {
-		if (!Array.isArray(arr)) {
-			throw new Error("Method getMaxIndex expected Array!");
-		}
-
-		if (arr.length === 0) {
-			return undefined;
+		if (!Array.isArray(arr) || arr.length === 0) {
+			throw new Error("Method getMaxIndex expected Array with length > 0!");
 		}
 
 		if (arr.length === 1) {
 			return 0;
 		}
 
-		let index = 0;
-		for (let i = 1; i < arr.length; ++i) {
-			index = arr[i] > arr[i - 1] ? i : index;
-		}
+		const maxIndex: number = arr.reduce((res, item, i) => {
+			if (item > arr[res]) {
+				return i;
+			}
 
-		return index;
+			return res;
+		}, 0);
+
+		return maxIndex;
 	}
 
 	/**
