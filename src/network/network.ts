@@ -9,6 +9,15 @@ const writeFile = promisify(fs.writeFile);
 const readFile = promisify(fs.readFile);
 
 export type ModelNN = { IH: NdArray, HO: NdArray, LR: number, activator: ActivationStrategy };
+export type Relation = "IH" | "HO";
+
+export interface NetworkConfig {
+	inputSize: number;
+	hiddenSize: number;
+	outputSize: number;
+	LR?: number;
+	MOMENT?: number;
+}
 
 export interface INetwork {
 	train(trainSet: TrainSet, count: number, activator?: ActivationStrategy): void;
@@ -20,9 +29,16 @@ export interface IModel<T> {
 	getModel(): T;
 }
 
-interface IForwardResult {
+export interface IForwardResult {
 	hiddenOutputs: NdArray;
 	finalOutputs: NdArray;
+}
+
+export interface IBackResult {
+	deltaWeightsHO: NdArray;
+	deltaWeightsIH: NdArray;
+	weightsHO: NdArray;
+	weightsIH: NdArray;
 }
 
 export interface ITrainItem {
@@ -33,6 +49,9 @@ export interface ITrainItem {
 export type TrainSet = ITrainItem[];
 
 export class Network implements INetwork, IModel<ModelNN> {
+	private static readonly LR_DEFAULT: number = 0.3;
+	private static readonly MOMENT_DEFAULT: number = 0;
+
 	// сериализуем тренированную модель
 	static async serialize(nn: Network, filePath: string) {
 		const {IH, HO, LR} = nn.getModel();
@@ -77,10 +96,18 @@ export class Network implements INetwork, IModel<ModelNN> {
 		}
 	}
 
+	// Скорость обучения
+	private LR: number = 0.3;
+	// Момент
+	private MOMENT: number = 0;
 	// Матрица весов между входным и скрытым слоем
 	private weightsIH: NdArray;
 	// Матрица весов между скрытым и выходным слоем
 	private weightsHO: NdArray;
+	// Матрица предыдущих изменений весов между входным и скрытым слоем
+	private prevDeltaWeightsIH: NdArray;
+	// Матрица предыдущих изменений весов между скрытым и выходным слоем
+	private prevDeltaWeightsHO: NdArray;
 	// Объект-активатор (По умолчанию сигмоида)
 	private activator: ActivationStrategy = new Sigmoid();
 
@@ -108,7 +135,40 @@ export class Network implements INetwork, IModel<ModelNN> {
 		this.activator = activator;
 	}
 
-	constructor(inputSize: number, hiddenSize: number, outputSize: number, private LR: number = 0.3) {
+	/**
+	 * Setter функции активации
+	 */
+	setActivatorStrategy(activator: ActivationStrategy) {
+		this.activator = activator;
+	}
+
+	constructor(config: NetworkConfig)
+	constructor(inputSize: number, hiddenSize: number, outputSize: number, LR?: number, MOMENT?: number)
+	constructor(
+		configOrInputSize: number | NetworkConfig,
+		hiddenSize?: number,
+		outputSize?: number,
+		LR: number = Network.LR_DEFAULT,
+		MOMENT: number = Network.MOMENT_DEFAULT
+	) {
+		if (typeof configOrInputSize === "object") {
+			this.initFromConfig(configOrInputSize);
+		} else if (typeof configOrInputSize === "number") {
+			this.LR = LR;
+			this.MOMENT = MOMENT;
+			this.weightsIH = this.generateWeights(hiddenSize, configOrInputSize);
+			this.weightsHO = this.generateWeights(outputSize, hiddenSize);
+		}
+	}
+
+	/**
+	 * Иницмализация сети из объекта конфигурации
+	 */
+	private initFromConfig(config: NetworkConfig) {
+		const {inputSize, hiddenSize, outputSize, LR, MOMENT} = config;
+
+		this.LR = typeof LR === "number" ? LR : Network.LR_DEFAULT;
+		this.MOMENT = typeof MOMENT === "number" ? MOMENT : Network.MOMENT_DEFAULT;
 		this.weightsIH = this.generateWeights(hiddenSize, inputSize);
 		this.weightsHO = this.generateWeights(outputSize, hiddenSize);
 	}
@@ -167,7 +227,12 @@ export class Network implements INetwork, IModel<ModelNN> {
 		const targetMatrix = nj.array(targets, "float64").reshape(1, targets.length).T as NdArray;
 
 		const forwardResult = this.forwardPropagation(inputMatrix);
-		this.backPropagation(inputMatrix, targetMatrix, forwardResult);
+		const backResult = this.backPropagation(inputMatrix, targetMatrix, forwardResult);
+
+		this.prevDeltaWeightsHO = backResult.deltaWeightsHO;
+		this.prevDeltaWeightsIH = backResult.deltaWeightsIH;
+		this.weightsHO = backResult.weightsHO;
+		this.weightsIH = backResult.weightsIH;
 	}
 
 	/**
@@ -182,17 +247,27 @@ export class Network implements INetwork, IModel<ModelNN> {
 
 	/**
 	 * Подсчитываем дополнительные веса
-	 * @param inputs {NdArray}
-	 * @param outputs {NdArray}
-	 * @param errors {NdArray}
-	 * @returns {NdArray}
 	 */
-	private calcAdditionalWeights(inputs: NdArray, outputs: NdArray, errors: NdArray): NdArray {
+	private calcAdditionalWeights(inputs: NdArray, outputs: NdArray, errors: NdArray, type: Relation): NdArray {
 		const ones = nj.ones(outputs.shape) as NdArray;
 		const arg1 = errors.multiply(outputs).multiply(nj.subtract(ones, outputs));
 		const arg2 = inputs.T;
+		const deltaWeights = nj.dot(arg1, arg2).multiply(this.LR);
 
-		return nj.dot(arg1, arg2).multiply(this.LR);
+		switch (type) {
+			case "HO":
+				return Boolean(this.prevDeltaWeightsHO) && this.MOMENT !== 0
+					? deltaWeights.add(this.prevDeltaWeightsHO.multiply(this.MOMENT))
+					: deltaWeights;
+			case "IH":
+				return Boolean(this.prevDeltaWeightsIH) && this.MOMENT !== 0
+					? deltaWeights.add(this.prevDeltaWeightsIH.multiply(this.MOMENT))
+					: deltaWeights;
+			default:
+				break;
+		}
+
+		return deltaWeights;
 	}
 
 
@@ -221,14 +296,22 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 * @param targetMatrix {NdArray} Ожидаемые результаты, приобразованные в двумерный массив
 	 * @param result {IForwardResult} Объект с выходными сигналами на слоях после прямого прохода
 	 */
-	private backPropagation(inputMatrix: NdArray, targetMatrix: NdArray, result: IForwardResult): void {
+	private backPropagation(inputMatrix: NdArray, targetMatrix: NdArray, result: IForwardResult): IBackResult {
 		const {hiddenOutputs, finalOutputs} = result;
 		const outputErrors = targetMatrix.subtract(finalOutputs);
 		const hiddenErrors = this.weightsHO.T.dot(outputErrors);
-		const additionalHO = this.calcAdditionalWeights(hiddenOutputs, finalOutputs, outputErrors);
-		const additionalIH = this.calcAdditionalWeights(inputMatrix, hiddenOutputs, hiddenErrors);
 
-		this.weightsHO = this.weightsHO.add(additionalHO);
-		this.weightsIH = this.weightsIH.add(additionalIH);
+		const deltaWeightsHO = this.calcAdditionalWeights(hiddenOutputs, finalOutputs, outputErrors, "HO");
+		const deltaWeightsIH = this.calcAdditionalWeights(inputMatrix, hiddenOutputs, hiddenErrors, "IH");
+
+		const weightsHO = this.weightsHO.add(deltaWeightsHO);
+		const weightsIH = this.weightsIH.add(deltaWeightsIH);
+
+		return {
+			deltaWeightsHO,
+			deltaWeightsIH,
+			weightsHO,
+			weightsIH
+		};
 	}
 }
