@@ -26,8 +26,8 @@
     "@types/lodash": "^4.14.106",
     "@types/node": "^9.6.0",
     "@types/numjs": "^0.14.3",
-    "lodash": "^4.17.5",
+    "lodash": "^4.17.15",
     "mnist": "^1.1.0",
-    "numjs": "^0.15.1"
+    "numjs": "^0.16.0"
   }
 }

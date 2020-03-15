@@ -17,6 +17,7 @@ export interface NetworkConfig {
 	outputSize: number;
 	LR?: number;
 	MOMENT?: number;
+	useRProp?: boolean;
 }
 
 export interface INetwork {
@@ -51,10 +52,16 @@ export type TrainSet = ITrainItem[];
 export class Network implements INetwork, IModel<ModelNN> {
 	private static readonly LR_DEFAULT: number = 0.3;
 	private static readonly MOMENT_DEFAULT: number = 0;
+	private static readonly R_PROP_PARAMS = {
+		LR_MIN: 0.000001,
+		LR_MAX: 50,
+		LR_INC_MULT: 1.2,
+		LR_DEC_MULT: 0.5
+	};
 
 	// сериализуем тренированную модель
 	static async serialize(nn: Network, filePath: string) {
-		const {IH, HO, LR} = nn.getModel();
+		const { IH, HO, LR } = nn.getModel();
 
 		try {
 			const data = {
@@ -75,7 +82,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 	static async deserialize(filePath: string): Promise<Network> {
 		try {
 			const jsonStr: string = await readFile(getFileName(filePath), "utf8");
-			const {IH, HO, LR} = JSON.parse(jsonStr);
+			const { IH, HO, LR } = JSON.parse(jsonStr);
 			const weightsIH = nj.array(IH);
 			const weightsHO = nj.array(HO);
 
@@ -96,6 +103,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 		}
 	}
 
+	// GENERAL_PARAMS
 	// Скорость обучения
 	private LR: number = 0.3;
 	// Момент
@@ -110,6 +118,18 @@ export class Network implements INetwork, IModel<ModelNN> {
 	private prevDeltaWeightsHO: NdArray;
 	// Объект-активатор (По умолчанию сигмоида)
 	private activator: ActivationStrategy = new Sigmoid();
+
+	// RPROP_PARAMS
+	// Флаг использования метода обучения RProp
+	private useRProp: boolean = false;
+	// Матрица предыдущих скоростей обучения между входным и скрытым слоем
+	private prevLerningRateIH: NdArray;
+	// Матрица предыдущих скоростей обучения между скрытым и выходным слоем
+	private prevLerningRateHO: NdArray;
+	// Матрица предыдущих ошибок между входным и скрытым слоем
+	private prevErrorsIH: NdArray;
+	// Матрица предыдущих ошибок между скрытым и выходным слоем
+	private prevErrorsHO: NdArray;
 
 	/**
 	 * Getter модели сети
@@ -127,7 +147,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 * Setter модели сети
 	 */
 	setModel(model: ModelNN): void {
-		const {IH, HO, LR, activator} = model;
+		const { IH, HO, LR, activator } = model;
 
 		this.weightsIH = IH;
 		this.weightsHO = HO;
@@ -143,21 +163,33 @@ export class Network implements INetwork, IModel<ModelNN> {
 	}
 
 	constructor(config: NetworkConfig)
-	constructor(inputSize: number, hiddenSize: number, outputSize: number, LR?: number, MOMENT?: number)
+	constructor(
+		inputSize: number,
+		hiddenSize: number,
+		outputSize: number,
+		LR?: number,
+		MOMENT?: number,
+		useRProp?: boolean)
 	constructor(
 		configOrInputSize: number | NetworkConfig,
 		hiddenSize?: number,
 		outputSize?: number,
 		LR: number = Network.LR_DEFAULT,
-		MOMENT: number = Network.MOMENT_DEFAULT
+		MOMENT: number = Network.MOMENT_DEFAULT,
+		useRProp: boolean = false
 	) {
 		if (typeof configOrInputSize === "object") {
 			this.initFromConfig(configOrInputSize);
 		} else if (typeof configOrInputSize === "number") {
 			this.LR = LR;
 			this.MOMENT = MOMENT;
+			this.useRProp = useRProp;
 			this.weightsIH = this.generateWeights(hiddenSize, configOrInputSize);
 			this.weightsHO = this.generateWeights(outputSize, hiddenSize);
+		}
+
+		if (this.useRProp) {
+			this.initRProp();
 		}
 	}
 
@@ -165,12 +197,24 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 * Иницмализация сети из объекта конфигурации
 	 */
 	private initFromConfig(config: NetworkConfig) {
-		const {inputSize, hiddenSize, outputSize, LR, MOMENT} = config;
+		const { inputSize, hiddenSize, outputSize, LR, MOMENT, useRProp } = config;
 
 		this.LR = typeof LR === "number" ? LR : Network.LR_DEFAULT;
 		this.MOMENT = typeof MOMENT === "number" ? MOMENT : Network.MOMENT_DEFAULT;
+		this.useRProp = typeof useRProp === "boolean" ? useRProp : false;
 		this.weightsIH = this.generateWeights(hiddenSize, inputSize);
 		this.weightsHO = this.generateWeights(outputSize, hiddenSize);
+	}
+
+	/**
+	 * Инициализация дополнительных матриц для RProp
+	 */
+	private initRProp() {
+		this.prevErrorsIH = nj.ones(this.weightsIH.shape);
+		this.prevErrorsHO = nj.ones(this.weightsHO.shape);
+
+		this.prevLerningRateIH = nj.zeros(this.weightsIH.shape).assign(this.LR, false);
+		this.prevLerningRateHO = nj.zeros(this.weightsHO.shape).assign(this.LR, false);
 	}
 
 	/**
@@ -191,7 +235,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 
 			console.time(`Epoch ${epochCounter}`);
 			while (trainCounter >= 0) {
-				const {inputs, targets} = trainSet[trainCounter];
+				const { inputs, targets } = trainSet[trainCounter];
 				this.trainStep(inputs, targets);
 				trainCounter -= 1;
 			}
@@ -207,7 +251,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 */
 	query(inputs: number[]): number[] {
 		const inputMatrix = nj.array(inputs).reshape(1, inputs.length).T as NdArray;
-		const {finalOutputs} = this.forwardPropagation(inputMatrix);
+		const { finalOutputs } = this.forwardPropagation(inputMatrix);
 
 		return finalOutputs.tolist<number[]>().reduce((res, item) => {
 			res.push(...item);
@@ -252,22 +296,22 @@ export class Network implements INetwork, IModel<ModelNN> {
 		const ones = nj.ones(outputs.shape) as NdArray;
 		const arg1 = errors.multiply(outputs).multiply(nj.subtract(ones, outputs));
 		const arg2 = inputs.T;
-		const deltaWeights = nj.dot(arg1, arg2).multiply(this.LR);
 
-		switch (type) {
-			case "HO":
-				return Boolean(this.prevDeltaWeightsHO) && this.MOMENT !== 0
-					? deltaWeights.add(this.prevDeltaWeightsHO.multiply(this.MOMENT))
-					: deltaWeights;
-			case "IH":
-				return Boolean(this.prevDeltaWeightsIH) && this.MOMENT !== 0
-					? deltaWeights.add(this.prevDeltaWeightsIH.multiply(this.MOMENT))
-					: deltaWeights;
-			default:
-				break;
+		if (type === "HO") {
+			const deltaWeights = nj.dot(arg1, arg2).multiply(this.LR);
+
+			return Boolean(this.prevDeltaWeightsHO) && this.MOMENT !== 0
+				? deltaWeights.add(this.prevDeltaWeightsHO.multiply(this.MOMENT))
+				: deltaWeights;
 		}
 
-		return deltaWeights;
+		if (type === "IH") {
+			const deltaWeights = nj.dot(arg1, arg2).multiply(this.LR);
+
+			return Boolean(this.prevDeltaWeightsIH) && this.MOMENT !== 0
+				? deltaWeights.add(this.prevDeltaWeightsIH.multiply(this.MOMENT))
+				: deltaWeights;
+		}
 	}
 
 
@@ -297,7 +341,7 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 * @param result {IForwardResult} Объект с выходными сигналами на слоях после прямого прохода
 	 */
 	private backPropagation(inputMatrix: NdArray, targetMatrix: NdArray, result: IForwardResult): IBackResult {
-		const {hiddenOutputs, finalOutputs} = result;
+		const { hiddenOutputs, finalOutputs } = result;
 		const outputErrors = targetMatrix.subtract(finalOutputs);
 		const hiddenErrors = this.weightsHO.T.dot(outputErrors);
 

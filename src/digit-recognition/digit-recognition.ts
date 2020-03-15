@@ -108,12 +108,12 @@ export class DigitRecognition {
 	 * либо размер скрытого слоя, коэффициент скорости обучения и момент
 	 */
 	constructor(network: Network)
-	constructor(hiddenSize: number, LR?: number, MOMENT?: number)
-	constructor(hiddenOrNetwork: number | Network, LR?: number, MOMENT?: number) {
+	constructor(hiddenSize: number, LR?: number, MOMENT?: number, useRProp?: boolean)
+	constructor(hiddenOrNetwork: number | Network, LR?: number, MOMENT?: number, useRProp?: boolean) {
 		if (typeof hiddenOrNetwork === "object" && hiddenOrNetwork instanceof Network) {
 			this.nn = hiddenOrNetwork;
 		} else if (typeof hiddenOrNetwork === "number") {
-			this.nn = new Network(DigitRecognition.INPUT, hiddenOrNetwork, DigitRecognition.OUTPUT, LR, MOMENT);
+			this.nn = new Network(DigitRecognition.INPUT, hiddenOrNetwork, DigitRecognition.OUTPUT, LR, MOMENT, useRProp);
 		}
 	}
 
