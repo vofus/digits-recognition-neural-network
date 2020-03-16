@@ -130,6 +130,10 @@ export class Network implements INetwork, IModel<ModelNN> {
 	private prevErrorsIH: NdArray;
 	// Матрица предыдущих ошибок между скрытым и выходным слоем
 	private prevErrorsHO: NdArray;
+	// Матрица предыдущих знаков градиента между входным и скрытым слоем
+	private prevSignIH: NdArray;
+	// Матрица предыдущих знаков градиента между скрытым и выходным слоем
+	private prevSignHO: NdArray;
 
 	/**
 	 * Getter модели сети
@@ -210,11 +214,18 @@ export class Network implements INetwork, IModel<ModelNN> {
 	 * Инициализация дополнительных матриц для RProp
 	 */
 	private initRProp() {
+		// Сбросить скорость обучения и момент на значения по умолчанию для алгоритма RProp
+		this.LR = 0.5;
+		this.MOMENT = 1;
+
 		this.prevErrorsIH = nj.ones(this.weightsIH.shape);
 		this.prevErrorsHO = nj.ones(this.weightsHO.shape);
 
 		this.prevLerningRateIH = nj.zeros(this.weightsIH.shape).assign(this.LR, false);
 		this.prevLerningRateHO = nj.zeros(this.weightsHO.shape).assign(this.LR, false);
+
+		this.prevSignIH = nj.zeros(this.weightsIH.shape);
+		this.prevSignHO = nj.zeros(this.weightsIH.shape);
 	}
 
 	/**
@@ -296,24 +307,90 @@ export class Network implements INetwork, IModel<ModelNN> {
 		const ones = nj.ones(outputs.shape) as NdArray;
 		const arg1 = errors.multiply(outputs).multiply(nj.subtract(ones, outputs));
 		const arg2 = inputs.T;
+		let deltaWeights: NdArray;
+
+		if (this.useRProp) {
+			const temp = nj.dot(arg1, arg2);
+			const LRMatrix = this.calcLRMatrixForRProp(temp, type);
+
+			// console.log("LR: ", LRMatrix.shape, LRMatrix);
+			// console.log("TEMP: ", temp.shape, temp);
+
+			deltaWeights = temp.multiply(LRMatrix);
+		} else {
+			deltaWeights = nj.dot(arg1, arg2).multiply(this.LR);
+		}
 
 		if (type === "HO") {
-			const deltaWeights = nj.dot(arg1, arg2).multiply(this.LR);
-
 			return Boolean(this.prevDeltaWeightsHO) && this.MOMENT !== 0
 				? deltaWeights.add(this.prevDeltaWeightsHO.multiply(this.MOMENT))
 				: deltaWeights;
 		}
 
 		if (type === "IH") {
-			const deltaWeights = nj.dot(arg1, arg2).multiply(this.LR);
-
 			return Boolean(this.prevDeltaWeightsIH) && this.MOMENT !== 0
 				? deltaWeights.add(this.prevDeltaWeightsIH.multiply(this.MOMENT))
 				: deltaWeights;
 		}
 	}
 
+	/**
+	 * Посчитать матрицу скоростей обучения для алгоритма RProp
+	 */
+	private calcLRMatrixForRProp(gradient: NdArray, type: Relation): NdArray {
+		const prevSignMatrix = type === "IH" ? this.prevSignIH : this.prevSignHO;
+		const prevLRMatrix = type === "IH" ? this.prevLerningRateIH : this.prevLerningRateHO;
+		const LRMatrix = nj.zeros(gradient.shape);
+		const signMatrix = this.getSignMatrix(gradient);
+		const [rows, cols] = gradient.shape;
+
+		for (let rowIndex = 0; rowIndex < rows; ++rowIndex) {
+			for (let colIndex = 0; colIndex < cols; ++colIndex) {
+				const prevSign = prevSignMatrix.get(rowIndex, colIndex);
+				const currentSign = signMatrix.get(rowIndex, colIndex);
+				const conditionForChange = prevSign !== currentSign;
+
+				if (conditionForChange) {
+					const value = currentSign === 0 ? 0 : currentSign < 0 ? 0.5 : 1.2;
+					LRMatrix.set(rowIndex, colIndex, value);
+				} else {
+					const value = prevLRMatrix.get(rowIndex, colIndex);
+					LRMatrix.set(rowIndex, colIndex, value);
+				}
+			}
+		}
+
+		if (type === "IH") {
+			this.prevSignIH = signMatrix;
+			this.prevLerningRateIH = LRMatrix;
+		}
+
+		if (type === "HO") {
+			this.prevSignHO = signMatrix;
+			this.prevLerningRateHO = LRMatrix;
+		}
+
+		return LRMatrix;
+	}
+
+	/**
+	 * Получить матрицу знаков
+	 */
+	private getSignMatrix(matrix: NdArray): NdArray {
+		const signMatrix = nj.zeros(matrix.shape);
+		const [rows, cols] = matrix.shape;
+
+		for (let rowIndex = 0; rowIndex < rows; ++rowIndex) {
+			for (let colIndex = 0; colIndex < cols; ++colIndex) {
+				const value = matrix.get(rowIndex, colIndex);
+				const sign = value === 0 ? 0 : value < 0 ? -1 : 1;
+
+				signMatrix.set(rowIndex, colIndex, sign);
+			}
+		}
+
+		return signMatrix;
+	}
 
 	/**
 	 * Прямое распространение сигнала
